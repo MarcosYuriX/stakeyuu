@@ -1,4 +1,4 @@
-/* ===== YuuTracker — app.js ===== */
+/* ===== StakeYuu — app.js ===== */
 
 /* ============================================================
    CONFIG DA NUVEM (Supabase) — cole aqui os dados do seu projeto
@@ -453,7 +453,7 @@ function exportarJSON() {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `yuutracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `stakeyuu-backup-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -475,7 +475,7 @@ function importarJSON(file) {
       }
       render();
     } catch (e) {
-      alert('Arquivo inválido. Use um backup exportado pelo YuuTracker.');
+      alert('Arquivo inválido. Use um backup exportado pelo StakeYuu.');
     }
   };
   reader.readAsText(file);
