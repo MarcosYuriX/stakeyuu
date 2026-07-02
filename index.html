@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YuuTracker — Gestão de Apostas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-logo">Y</div>
+    <div>
+      <h1>YuuTracker</h1>
+      <span class="brand-sub">gestão de apostas</span>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <span class="user-email" id="userEmail" hidden></span>
+    <button class="btn ghost" id="btnBankroll">⚙ Banca</button>
+    <button class="btn ghost" id="btnExport">⤓ Exportar</button>
+    <button class="btn ghost" id="btnImport">⤒ Importar</button>
+    <input type="file" id="fileImport" accept=".json" hidden>
+    <button class="btn primary" id="btnAdd">＋ Adicionar aposta</button>
+    <button class="btn ghost" id="btnSair" hidden>Sair</button>
+  </div>
+</header>
+
+<!-- Tela de login (só aparece no modo nuvem) -->
+<div class="auth-screen" id="authScreen" hidden>
+  <div class="auth-card">
+    <div class="brand-logo" style="margin:0 auto">Y</div>
+    <h2>YuuTracker</h2>
+    <p class="hint">Entre pra acessar suas apostas de qualquer lugar</p>
+    <div class="field"><label>E-mail</label><input type="email" id="authEmail" placeholder="voce@email.com" autocomplete="email"></div>
+    <div class="field"><label>Senha</label><input type="password" id="authSenha" placeholder="Mínimo 6 caracteres" autocomplete="current-password"></div>
+    <button class="btn primary" id="btnEntrar">Entrar</button>
+    <button class="btn ghost" id="btnCriar">Criar conta</button>
+    <p class="hint auth-msg" id="authMsg"></p>
+  </div>
+</div>
+
+<main class="container">
+
+  <!-- Gráfico -->
+  <section class="card chart-card">
+    <div class="chart-head">
+      <h2>Evolução do lucro</h2>
+      <div class="chart-legend" id="chartInfo"></div>
+    </div>
+    <div class="chart-wrap"><canvas id="chartLucro"></canvas></div>
+  </section>
+
+  <!-- Estatísticas -->
+  <section class="stats-grid">
+    <div class="stat-card"><span class="stat-label">Apostas</span><span class="stat-value" id="stApostas">0</span><span class="stat-extra" id="stPendentes"></span></div>
+    <div class="stat-card"><span class="stat-label">Lucro</span><span class="stat-value" id="stLucro">R$ 0,00</span><span class="stat-extra" id="stStake"></span></div>
+    <div class="stat-card"><span class="stat-label">ROI</span><span class="stat-value" id="stRoi">0%</span><span class="stat-extra" id="stOddMedia"></span></div>
+    <div class="stat-card"><span class="stat-label">Progressão da banca</span><span class="stat-value" id="stProg">0%</span><span class="stat-extra" id="stBanca"></span></div>
+    <div class="stat-card"><span class="stat-label">Taxa de acerto</span><span class="stat-value" id="stAcerto">—</span><span class="stat-extra" id="stPlacar"></span></div>
+  </section>
+
+  <!-- Filtros -->
+  <section class="card filters">
+    <div class="filter-group">
+      <label>Casa</label>
+      <select id="fCasa"><option value="">Todas</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Tipster</label>
+      <select id="fTipster"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Esporte</label>
+      <select id="fEsporte"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Estado</label>
+      <select id="fEstado">
+        <option value="">Todos</option>
+        <option value="pendente">Pendente</option>
+        <option value="ganha">Ganha</option>
+        <option value="perdida">Perdida</option>
+        <option value="anulada">Anulada</option>
+        <option value="cashout">Cashout</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>De</label>
+      <input type="date" id="fDe">
+    </div>
+    <div class="filter-group">
+      <label>Até</label>
+      <input type="date" id="fAte">
+    </div>
+    <button class="btn ghost small" id="btnLimparFiltros">Limpar</button>
+  </section>
+
+  <!-- Meses -->
+  <nav class="mes-bar" id="mesBar"></nav>
+
+  <!-- Lista -->
+  <section id="listaApostas"></section>
+
+  <div class="empty-state" id="emptyState" hidden>
+    <p>Nenhuma aposta registrada ainda.</p>
+    <button class="btn primary" onclick="abrirModal()">＋ Adicionar a primeira aposta</button>
+  </div>
+
+</main>
+
+<!-- Modal de aposta -->
+<div class="modal-backdrop" id="modalAposta" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modalTitulo">Adicionar aposta</h2>
+      <button class="btn-close" onclick="fecharModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="inpId">
+      <div class="ocr-box" id="ocrBox">
+        <button class="btn ghost small" id="btnOcr" type="button">📷 Ler do print</button>
+        <span class="hint" id="ocrStatus">Cole o print com Ctrl+V ou arraste aqui</span>
+        <input type="file" id="fileOcr" accept="image/*" hidden>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Data</label><input type="date" id="inpData" required></div>
+        <div class="field"><label>Hora</label><input type="time" id="inpHora"></div>
+      </div>
+      <div class="field"><label>Casa de apostas</label>
+        <input type="text" id="inpCasa" list="listCasas" placeholder="Ex: Betano">
+        <datalist id="listCasas"></datalist>
+      </div>
+      <div class="field"><label>Título da aposta</label>
+        <input type="text" id="inpTitulo" placeholder="Ex: Miguelito marcar a qualquer momento">
+      </div>
+      <div class="row2">
+        <div class="field"><label>Esporte</label>
+          <input type="text" id="inpEsporte" list="listEsportes" placeholder="Futebol">
+          <datalist id="listEsportes">
+            <option value="Futebol"><option value="Basquete"><option value="Tênis">
+            <option value="MMA"><option value="eSports">
+          </datalist>
+        </div>
+        <div class="field"><label>Estado</label>
+          <select id="inpEstado">
+            <option value="pendente">Pendente</option>
+            <option value="ganha">Ganha</option>
+            <option value="perdida">Perdida</option>
+            <option value="anulada">Anulada</option>
+            <option value="cashout">Cashout</option>
+          </select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Cotação (odd)</label><input type="text" inputmode="decimal" id="inpCotacao" placeholder="Ex: 2,50"></div>
+        <div class="field"><label>Valor (R$)</label><input type="text" inputmode="decimal" id="inpValor" placeholder="Ex: 50"></div>
+      </div>
+      <div class="field" id="fieldCashout" hidden>
+        <label>Retorno do cashout (R$)</label>
+        <input type="text" inputmode="decimal" id="inpRetorno" placeholder="Valor recebido no cashout">
+      </div>
+      <div class="field"><label>Tipster</label>
+        <input type="text" id="inpTipster" list="listTipsters" placeholder="Opcional">
+        <datalist id="listTipsters"></datalist>
+      </div>
+      <div class="field"><label>Comentário</label>
+        <textarea id="inpComentario" rows="2" placeholder="Opcional"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" onclick="fecharModal()">Cancelar</button>
+      <button class="btn primary" id="btnSalvar" onclick="salvarAposta()">Salvar aposta</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal de banca -->
+<div class="modal-backdrop" id="modalBanca" hidden>
+  <div class="modal small">
+    <div class="modal-head">
+      <h2>Configurar banca</h2>
+      <button class="btn-close" onclick="fecharModalBanca()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><label>Nome da banca</label><input type="text" id="inpBancaNome" placeholder="Ex: Banca principal"></div>
+      <div class="field"><label>Banca inicial (R$)</label><input type="text" inputmode="decimal" id="inpBancaInicial" placeholder="Ex: 1000"></div>
+      <div class="field"><label>Palavras ignoradas na leitura do print</label>
+        <textarea id="inpOcrIgnorar" rows="2" placeholder="Separe por vírgula. Ex: Flamengo x Vasco, Brasileirão, Ao vivo"></textarea>
+        <p class="hint">Linhas do print que contenham essas palavras não serão usadas como título da aposta.</p>
+      </div>
+      <p class="hint">A progressão é calculada como lucro ÷ banca inicial.</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" onclick="fecharModalBanca()">Cancelar</button>
+      <button class="btn primary" onclick="salvarBanca()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
