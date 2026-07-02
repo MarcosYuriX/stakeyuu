@@ -6,7 +6,7 @@ Gestor de apostas esportivas com banco de dados na nuvem — registre apostas, a
 
 ![StakeYuu](screenshot.png)
 
-## Funcionalidades
+## Funcionalidades 
 
 - 📊 **Dashboard completo** — gráfico de evolução do lucro, ROI, progressão da banca e taxa de acerto
 - 📷 **Leitura de print (OCR)** — cole o print do bilhete e o app preenche cotação, valor, casa e título sozinho, direto no navegador
