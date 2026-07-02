@@ -524,6 +524,8 @@ async function lerPrint(imagem) {
         if (m.status === 'recognizing text') status.textContent = `Lendo print... ${Math.round(m.progress * 100)}%`;
       }
     });
+    console.log('=== TEXTO OCR ===');
+    console.log(data.text);
     const ok = aplicarOcr(data.text);
     status.textContent = ok ? '✓ Preenchido! Confira os valores antes de salvar.' : 'Não achei odd/valor no print. Preencha manualmente.';
   } catch (e) {
@@ -609,7 +611,8 @@ function aplicarOcr(texto) {
       'enhanced', 'combos', 'boost', 'ao vivo', 'criar aposta', 'cash out', 'cashout',
       'aposta simples', 'aposta múltipla', 'ganhos potenciais', 'retorno potencial',
       'possível retorno', 'apostar agora', 'bilhete', 'cupom', 'meus boletins',
-      'total de odds', 'total apostado', 'ganho potencial', 'venceu', 'perdeu'];
+      'total de odds', 'total apostado', 'ganho potencial', 'venceu', 'perdeu',
+      'combinações melhoradas', 'combinacoes melhoradas'];
     // Palavras que o usuário configurou (⚙ Banca)
     const ignorarUsuario = (state.config.ocrIgnorar || '')
       .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
@@ -620,16 +623,44 @@ function aplicarOcr(texto) {
       'handicap', 'dupla chance', 'empate', 'finaliza', 'chute', 'assistência', 'ponto', 'sets',
       'qualificar', 'classificar', 'defesa', 'rebote', 'jogador'];
 
-    // Emenda linhas quebradas pelo OCR: termina em conectivo ou a próxima começa minúscula
+    // 1) Limpa bolinhas/ícones lidos como letra no começo da linha (O, ©, •, etc)
+    const cruas = texto.split('\n').map(x => x.trim().replace(/^[OoQ0©®•·º*@«»~_\-–—=]+\s+/, ''));
+
+    // 2) Solta pares de números pendurados no fim da linha (odd riscada + turbinada à direita do texto)
+    const soltas = [];
+    for (const s of cruas) {
+      const m = s.match(/^(.*[a-zA-ZÀ-ú])[\s:]+(\d[\d.,]*[\s>»~-]+\d[\d.,]*)\s*$/);
+      if (m) { soltas.push(m[1].trim()); soltas.push(m[2].trim()); }
+      else soltas.push(s);
+    }
+
+    // 3) Emenda linhas quebradas pelo OCR: termina em conectivo ou a próxima começa minúscula
+    //    (pula linhas só de números no meio, tipo a linha das odds)
     const CONTINUA = /(?:^|\s)(e|de|da|do|dos|das|na|no|nas|nos|ou|com|por|para|a|o|à|ao|&)$|[:\-+,]$/i;
     const brutas = [];
-    for (const s of texto.split('\n').map(x => x.trim())) {
-      const ant = brutas[brutas.length - 1];
-      if (s && ant && (ant.length + s.length) < 120 &&
-          (CONTINUA.test(ant) || /^[a-zà-ú]/.test(s)) && /[a-zA-ZÀ-ú]/.test(s)) {
-        brutas[brutas.length - 1] = ant + ' ' + s;
-      } else {
-        brutas.push(s);
+    let idxTexto = -1;
+    for (const s of soltas) {
+      if (!s) { brutas.push(s); idxTexto = -1; continue; }
+      const textual = /[a-zA-ZÀ-ú]{2,}/.test(s);
+      if (textual && idxTexto >= 0) {
+        const ant = brutas[idxTexto];
+        if ((ant.length + s.length) < 120 && (CONTINUA.test(ant) || /^[a-zà-ú]/.test(s))) {
+          brutas[idxTexto] = ant + ' ' + s;
+          continue;
+        }
+      }
+      brutas.push(s);
+      if (textual) idxTexto = brutas.length - 1;
+    }
+
+    // 4) Gruda quantificadores ("Mais de 3.5", "2+") na seleção da linha de baixo, invertido:
+    //    "Mais de 3.5" + "Portugal Escanteios" vira "Portugal Escanteios Mais de 3.5"
+    const QUANT = /^(?:(?:mais|menos|acima|abaixo|over|under)\b.{0,10}\d[\d.,]*\+?|\d+[\d.,]*\s*\+)/i;
+    for (let i = 0; i < brutas.length - 1; i++) {
+      if (brutas[i] && brutas[i].length <= 18 && QUANT.test(brutas[i]) && /[a-zA-ZÀ-ú]{4,}/.test(brutas[i + 1] || '')) {
+        const quant = brutas[i].replace(/[^\dA-Za-zÀ-ú+.,]+$/, '').trim();
+        brutas[i + 1] = brutas[i + 1] + ' ' + quant;
+        brutas[i] = '';
       }
     }
     const linhas = [];
