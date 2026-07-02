@@ -426,6 +426,7 @@ function abrirModalBanca() {
   inpBancaNome.value = state.config.bancaNome || '';
   inpBancaInicial.value = state.config.bancaInicial || '';
   inpOcrIgnorar.value = state.config.ocrIgnorar || '';
+  inpGeminiKey.value = state.config.geminiKey || '';
   modalBanca.hidden = false;
 }
 function fecharModalBanca() { modalBanca.hidden = true; }
@@ -433,13 +434,15 @@ async function salvarBanca() {
   state.config.bancaNome = inpBancaNome.value.trim() || 'Banca principal';
   state.config.bancaInicial = parseNum(inpBancaInicial.value);
   state.config.ocrIgnorar = inpOcrIgnorar.value.trim();
+  state.config.geminiKey = inpGeminiKey.value.trim();
   if (NUVEM) {
     const { data: { user } } = await sb.auth.getUser();
     const { error } = await sb.from('config').upsert({
       user_id: user.id,
       banca_nome: state.config.bancaNome,
       banca_inicial: state.config.bancaInicial,
-      ocr_ignorar: state.config.ocrIgnorar
+      ocr_ignorar: state.config.ocrIgnorar,
+      gemini_key: state.config.geminiKey
     });
     if (error) { alert('Erro ao salvar na nuvem: ' + error.message); return; }
   }
@@ -509,10 +512,76 @@ function carregarScript(src) {
   });
 }
 
+async function lerPrintGemini(imagem) {
+  const b64 = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej(new Error('Falha ao ler a imagem'));
+    r.readAsDataURL(imagem);
+  });
+  const prompt = `Extraia os dados deste print de aposta esportiva e responda SOMENTE com JSON válido, sem markdown.
+Formato: {"titulo": string, "cotacao": number, "valor_apostado": number ou null, "casa": string ou null, "estado": "pendente"|"ganha"|"perdida"|"anulada"|"cashout", "esporte": string ou null}
+Regras:
+- titulo: a(s) seleção(ões) da aposta, sem nomes de promoções (Super Odds, Turbinada, Combinações Melhoradas etc) e sem nome do evento sozinho. Se houver várias seleções, junte com " + ", colocando o detalhe antes do quantificador (ex: "Portugal Escanteios Mais de 3.5 + Cristiano Ronaldo Chutes no gol 2+").
+- cotacao: a odd total da aposta. Se houver uma odd riscada e uma nova (turbinada), use a NOVA.
+- valor_apostado: o valor apostado em reais (não o retorno/ganho potencial). null se não aparecer no print.
+- casa: nome da casa de apostas se aparecer (Betano, Bet365, Superbet...).
+- estado: "ganha" se houver selo VENCEU/GANHOU, "perdida" se PERDEU, senão "pendente".
+- esporte: Futebol, Basquete, Tênis etc, se der pra identificar.`;
+
+  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(state.config.geminiKey)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { inline_data: { mime_type: imagem.type || 'image/png', data: b64 } },
+          { text: prompt }
+        ]
+      }],
+      generationConfig: { response_mime_type: 'application/json' }
+    })
+  });
+  if (!resp.ok) throw new Error('API Gemini respondeu ' + resp.status);
+  const data = await resp.json();
+  const txt = (data.candidates?.[0]?.content?.parts?.[0]?.text || '').replace(/```json|```/g, '').trim();
+  console.log('=== GEMINI ===');
+  console.log(txt);
+  const j = JSON.parse(txt);
+
+  let achou = false;
+  if (j.titulo) { inpTitulo.value = String(j.titulo).slice(0, 120); achou = true; }
+  if (+j.cotacao > 0) { inpCotacao.value = String(+j.cotacao).replace('.', ','); achou = true; }
+  if (+j.valor_apostado > 0) { inpValor.value = String(+j.valor_apostado).replace('.', ','); achou = true; }
+  if (j.casa && !inpCasa.value) inpCasa.value = String(j.casa);
+  if (j.esporte) inpEsporte.value = String(j.esporte);
+  if (['ganha', 'perdida', 'anulada', 'cashout', 'pendente'].includes(j.estado)) {
+    inpEstado.value = j.estado;
+    toggleCashout();
+  }
+  return achou;
+}
+
 async function lerPrint(imagem) {
   const status = document.getElementById('ocrStatus');
   const btn = document.getElementById('btnOcr');
   btn.disabled = true;
+
+  // 1ª opção: IA do Google (se a chave estiver configurada em ⚙ Banca)
+  if (state.config.geminiKey) {
+    try {
+      status.textContent = 'Lendo print com IA...';
+      const ok = await lerPrintGemini(imagem);
+      status.textContent = ok ? '✓ Lido com IA! Confira antes de salvar.' : 'A IA não achou os dados. Preencha manualmente.';
+      btn.disabled = false;
+      return;
+    } catch (e) {
+      console.error('Gemini falhou, caindo pro OCR:', e);
+      status.textContent = 'IA indisponível, tentando OCR...';
+    }
+  }
+
+  // 2ª opção (ou fallback): OCR no navegador
   try {
     if (typeof Tesseract === 'undefined') {
       status.textContent = 'Carregando leitor (só demora na 1ª vez)...';
@@ -731,7 +800,8 @@ async function carregarNuvem() {
   if (cfg) state.config = {
     bancaNome: cfg.banca_nome || 'Banca principal',
     bancaInicial: +cfg.banca_inicial || 0,
-    ocrIgnorar: cfg.ocr_ignorar || ''
+    ocrIgnorar: cfg.ocr_ignorar || '',
+    geminiKey: cfg.gemini_key || ''
   };
 }
 
